@@ -1,7 +1,5 @@
 *__pycache__
 .*
 !/.gitignore
-*.xlsx
 *.csv
-*.pickle
 /init.ipynb
