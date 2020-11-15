@@ -721,12 +721,10 @@ def excel_exporter(data, file='export.xlsx'):
 
 
 
-def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000000, random_seed=42, ewma=False, days=252):
+def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000000, random_seed=42, ewma=False, period_days=252):
     #if method == 'hist':
     returns_DF = returns_DF.sort_index()
-    def historical(returns_DF, p, ewma, days):
-
-        returns_DF = returns_DF * np.sqrt(days)
+    def historical(returns_DF, p=p, n_days=n_days, ewma=ewma, period_days=period_days):
 
         my_list = list(returns_DF.columns)
         if ewma == False:
@@ -737,28 +735,34 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             # Without weekends
             returns_DF['days'] = np.arange(len(returns_DF)-1, -1,-1)
             # Note: np.log is ln
-            lamda = 1 - np.log(2)/(ewma*days)
+            lamda = 1 - (np.log(2)/(ewma*period_days))
+            # print('lambda:', lamda)
             # Formula used: (1-λ)× λ^(t-1)
             returns_DF['prob'] = (1-lamda) * lamda ** (returns_DF['days'])
             
             # Just to be sure that sum of prob is 1 but just needed if with weekends
             returns_DF['prob'] = returns_DF['prob'] / returns_DF['prob'].sum()    
 
+        returns_DF.to_csv('temp_exp_new.csv')
+
         # Order DF by size
         VaR = {}
         ES = {}
+
+
         for col in my_list:
             tmp_DF = returns_DF[[col,'prob']].sort_values(by=col)
             tmp_DF.index = np.arange(1, len(tmp_DF) + 1)
             tmp_DF['c_prob'] = tmp_DF['prob'].cumsum()
-
+        
             for idx, row in tmp_DF.iterrows():
                 if row['c_prob']  >= (1-p):
-                    last_row = idx
+                    last_row = idx 
                     break
 
             first_row = last_row - 1
             last_figure = tmp_DF.iloc[last_row][col]
+
 
             if first_row == -1:
                 tmp_VaR = last_figure
@@ -766,12 +770,13 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             else:
                 first_figure = tmp_DF.iloc[first_row][col]
             
-                q = ((1-p) - first_figure)/(last_figure - first_figure)
-                tmp_VaR = first_figure * q + last_figure * (1-q)
+                q = ((1-p) - tmp_DF.loc[first_row]['c_prob'])/(tmp_DF.loc[last_row]['c_prob'] - tmp_DF.loc[first_row]['c_prob'])
+                tmp_VaR = (first_figure * q + last_figure * (1-q)) * np.sqrt(n_days)
             
                 tmp_DF = tmp_DF.loc[:last_row]
-                tmp_DF.at[last_row, 'prob'] = last_figure - (tmp_DF['prob'].sum() - (1-p))
-                tmp_ES=(tmp_DF['prob'] * tmp_DF[col]).sum()
+                tmp_DF.at[last_row, 'prob'] =  tmp_DF.at[last_row, 'prob'] - (tmp_DF['prob'].sum() - (1-p))
+
+                tmp_ES=(tmp_DF['prob'] * np.sqrt(n_days) * tmp_DF[col]).sum()
                 
             
             VaR[col] = tmp_VaR
@@ -786,7 +791,7 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
         return VaR, ES
 
     #elif method in ['simulation', 'MC', 'Monte Carlo', 'Simulation']:
-    def simulation(returns_DF, n_days, p, n_sims, random_seed):
+    def simulation(returns_DF, n_days=n_days, p=p, n_sims=n_sims, random_seed=random_seed):
         mean = returns_DF.mean() * n_days
         std = returns_DF.std(ddof=1) * np.sqrt(n_days)
         VaR = pd.Series().rename('VaR')
@@ -802,7 +807,7 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
 
 
     #elif method in ['delta-normal', 'parametric', 'normal']:
-    def delta_normal(returns_DF, n_days, p):
+    def delta_normal(returns_DF, n_days=n_days, p=p):
         mean = np.mean(returns_DF) * n_days
         std = np.std(returns_DF, ddof=1) * np.sqrt(n_days)
         Z_99 = norm.ppf(1 - p)
@@ -815,11 +820,11 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
         raise Exception('Either output or method can be a list not both.')
     elif type(output) == list:
         if method in ['delta-normal', 'parametric', 'normal']:
-            VaR, ES = delta_normal(returns_DF, n_days, p)
+            VaR, ES = delta_normal(returns_DF)
         elif method in ['simulation', 'MC', 'Monte Carlo', 'Simulation']:
-            VaR, ES = simulation(returns_DF, n_days, p, n_sims, random_seed)
+            VaR, ES = simulation(returns_DF)
         elif method in ['hist']:
-            VaR, ES = historical(returns_DF, p, ewma, n_days)
+            VaR, ES = historical(returns_DF)
         else:
             raise Exception('Not defined moethod.')
         return pd.concat([VaR, ES], axis=1)
@@ -828,22 +833,22 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
         if output == 'VaR':
             for my_method in method:
                 if my_method in ['delta-normal', 'parametric', 'normal']:
-                    VaR, _ = delta_normal(returns_DF, n_days, p)
+                    VaR, _ = delta_normal(returns_DF)
                 elif my_method in ['simulation', 'MC', 'Monte Carlo', 'Simulation']:
-                    VaR, _ = simulation(returns_DF, n_days, p, n_sims, random_seed)
+                    VaR, _ = simulation(returns_DF)
                 elif my_method in ['hist']:
-                    VaR, _ = historical(returns_DF, p, ewma, n_days)
+                    VaR, _ = historical(returns_DF)
                 else:
                     raise Exception('Not defined moethod.')
                 exp_list.append(VaR.rename(my_method))
         elif output == 'ES':
             for my_method in method:
                 if my_method in ['delta-normal', 'parametric', 'normal']:
-                    _, ES = delta_normal(returns_DF, n_days, p)
+                    _, ES = delta_normal(returns_DF)
                 elif my_method in ['simulation', 'MC', 'Monte Carlo', 'Simulation']:
-                    _, ES = simulation(returns_DF, n_days, p, n_sims, random_seed)
+                    _, ES = simulation(returns_DF)
                 elif my_method in ['hist']:
-                    _, ES = historical(returns_DF, p, ewma, n_days)
+                    _, ES = historical(returns_DF)
                 else:
                     raise Exception('Not defined moethod.')
                 exp_list.append(ES.rename(my_method))
