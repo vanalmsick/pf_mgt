@@ -763,8 +763,9 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             first_row = last_row - 1
             last_figure = tmp_DF.iloc[last_row][col]
 
+            #print('Frist row:',first_row,'Last row:',last_row)
 
-            if first_row == -1:
+            if first_row == 0:
                 tmp_VaR = last_figure
                 tmp_ES = last_figure
             else:
@@ -856,3 +857,46 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             raise Exception('Not defined output.')
         return pd.concat(exp_list, axis=1)
 
+
+
+def drop_suffix(df, suffix):
+    df.columns = df.columns.str.rstrip(suffix)
+    return df
+
+def check_VaR_violations(returns_df, VaR_df, NA_method='ffill'):
+    df_returns = returns_df.copy()
+    df_returns.index = pd.to_datetime(df_returns.index)
+    df_VaR = VaR_df.copy()
+    df_VaR.index = pd.to_datetime(df_VaR.index)
+    original_cols = list(df_returns.columns)
+    if sorted(list(df_returns.columns)) != sorted(list(df_VaR.columns)):
+        print('Actual DF:', sorted(list(df_returns.columns)))
+        print('Limit DF:', sorted(list(df_VaR.columns)))
+        raise(Exception('Both data frames have not the same columns!'))
+    df_returns.columns = [str(col) + '_actual' for col in df_returns.columns]
+    df_VaR.columns = [str(col) + '_limit' for col in df_VaR.columns]
+    actual_columns = list(df_returns.columns)
+    limit_columns = list(df_VaR.columns)
+    combined = pd.concat([df_returns, df_VaR], axis=1)
+    combined[limit_columns] = combined[limit_columns].fillna(method=NA_method)
+    combined = combined.dropna()
+    breaches = drop_suffix(combined[actual_columns], '_actual')[original_cols] > drop_suffix(combined[limit_columns], '_limit')[original_cols]
+    #print(VaR_df.index)
+
+    out_breach = pd.DataFrame(columns=["Date","Portfolio","Breach","Limit"])
+    for breach in breaches.iterrows():
+        idx, breach = breach
+        if breach.any():
+            for PF, value in breach.iteritems():
+                if value:
+                    out_breach = out_breach.append({"Date":breach.name,"Portfolio":PF,"Breach":combined.at[idx, PF+'_actual'],"Limit":combined.at[idx, PF+'_limit']}, ignore_index=True)
+    concl_breaches = pd.DataFrame(columns=['PF','count','average breach','average limit','percentage','observations'])
+    for col in original_cols:
+        count = out_breach[out_breach['Portfolio'] == col]['Portfolio'].count()
+        breach = out_breach[out_breach['Portfolio'] == col]['Breach'].mean()
+        limit = out_breach[out_breach['Portfolio'] == col]['Limit'].mean()
+        length = breaches.shape[0]
+        pct = count / length
+        concl_breaches = concl_breaches.append(pd.Series({'PF':col, 'count':count,'average breach':breach,'average limit':limit,'percentage':pct,'observations':length}), ignore_index=True)
+    concl_breaches.set_index('PF', inplace=True)
+    return out_breach, concl_breaches
