@@ -742,8 +742,7 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             returns_DF['prob'] = (1-lamda) * lamda ** (returns_DF['days'])
             
             # Just to be sure that sum of prob is 1 but just needed if with weekends
-            # returns_DF['prob'] = returns_DF['prob'] / returns_DF['prob'].sum()
-
+            returns_DF['prob'] = returns_DF['prob'] / returns_DF['prob'].sum()    
 
         # Order DF by size
         VaR = {}
@@ -752,14 +751,30 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             tmp_DF = returns_DF[[col,'prob']].sort_values(by=col)
             tmp_DF.index = np.arange(1, len(tmp_DF) + 1)
             tmp_DF['c_prob'] = tmp_DF['prob'].cumsum()
-            last_figure = tmp_DF.index[(tmp_DF['c_prob'] > (1-p)).cumsum()==1].values[0]
-            q = ((1-p) - tmp_DF.loc[last_figure - 1]['c_prob'])/(tmp_DF.loc[last_figure]['c_prob']- tmp_DF.loc[last_figure - 1]['c_prob'])
-            tmp_VaR = tmp_DF.loc[last_figure - 1][col] * q + tmp_DF.loc[last_figure - 1][col] * (1-q)
+
+            for idx, row in tmp_DF.iterrows():
+                if row['c_prob']  >= (1-p):
+                    last_row = idx
+                    break
+
+            first_row = last_row - 1
+            last_figure = tmp_DF.iloc[last_row][col]
+
+            if first_row == -1:
+                tmp_VaR = last_figure
+                tmp_ES = last_figure
+            else:
+                first_figure = tmp_DF.iloc[first_row][col]
+            
+                q = ((1-p) - first_figure)/(last_figure - first_figure)
+                tmp_VaR = first_figure * q + last_figure * (1-q)
+            
+                tmp_DF = tmp_DF.loc[:last_row]
+                tmp_DF.at[last_row, 'prob'] = last_figure - (tmp_DF['prob'].sum() - (1-p))
+                tmp_ES=(tmp_DF['prob'] * tmp_DF[col]).sum()
+                
+            
             VaR[col] = tmp_VaR
- 
-            tmp_DF = tmp_DF.loc[:last_figure]
-            tmp_DF.at[last_figure, 'prob'] = tmp_DF.loc[last_figure]['prob'] - (tmp_DF['prob'].sum() - (1-p))
-            tmp_ES=(tmp_DF['prob'] * tmp_DF[col]).sum()
             ES[col] = tmp_ES
             
         VaR = pd.Series(VaR).rename('VaR')
