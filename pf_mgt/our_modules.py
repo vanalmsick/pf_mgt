@@ -401,7 +401,7 @@ def moments(returns, output='all', r_f=0, days_pa=252, Cov_matrix=False):
         return MDD
     stats["MaxD"]=MDD(returns) #Maximum drawdown
     stats["Sharpe (p.a.)"]=(stats["Mean (p.a.)"]-r_f)/stats["SStd (p.a.)"] # Sharpe Ratio
-    stats["Sharpe"]=(stats["Mean"]-r_f)/stats["SStd"] # Sharpe Ratio
+    stats["Sharpe"]=(stats["Mean"]-(r_f/days_pa))/stats["SStd"] # Sharpe Ratio
     stats["CE"] = np.exp(np.log(1 + returns).mean(axis=0)) - 1 #Certainty Equivalent
     if output != 'all':
         if type(output) != list:
@@ -743,8 +743,6 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             # Just to be sure that sum of prob is 1 but just needed if with weekends
             returns_DF['prob'] = returns_DF['prob'] / returns_DF['prob'].sum()    
 
-        returns_DF.to_csv('temp_exp_new.csv')
-
         # Order DF by size
         VaR = {}
         ES = {}
@@ -883,20 +881,21 @@ def check_VaR_violations(returns_df, VaR_df, NA_method='ffill'):
     breaches = drop_suffix(combined[actual_columns], '_actual')[original_cols] > drop_suffix(combined[limit_columns], '_limit')[original_cols]
     #print(VaR_df.index)
 
-    out_breach = pd.DataFrame(columns=["Date","Portfolio","Breach","Limit"])
+    out_breach = pd.DataFrame(columns=["Date","Portfolio","Actual Loss","Est. VaR"])
     for breach in breaches.iterrows():
         idx, breach = breach
         if breach.any():
             for PF, value in breach.iteritems():
                 if value:
-                    out_breach = out_breach.append({"Date":breach.name,"Portfolio":PF,"Breach":combined.at[idx, PF+'_actual'],"Limit":combined.at[idx, PF+'_limit']}, ignore_index=True)
-    concl_breaches = pd.DataFrame(columns=['PF','count','average breach','average limit','percentage','observations'])
+                    out_breach = out_breach.append({"Date":breach.name,"Portfolio":PF,"Actual Loss":combined.at[idx, PF+'_actual'],"Est. VaR":combined.at[idx, PF+'_limit']}, ignore_index=True)
+    concl_breaches = pd.DataFrame(columns=['PF','# VaR Exceeded',"Actual avg. loss","Average est. VaR",'Percentage','Observations'])
     for col in original_cols:
         count = out_breach[out_breach['Portfolio'] == col]['Portfolio'].count()
-        breach = out_breach[out_breach['Portfolio'] == col]['Breach'].mean()
-        limit = out_breach[out_breach['Portfolio'] == col]['Limit'].mean()
+        breach = out_breach[out_breach['Portfolio'] == col]["Actual Loss"].mean()
+        limit = out_breach[out_breach['Portfolio'] == col]["Est. VaR"].mean()
         length = breaches.shape[0]
         pct = count / length
-        concl_breaches = concl_breaches.append(pd.Series({'PF':col, 'count':count,'average breach':breach,'average limit':limit,'percentage':pct,'observations':length}), ignore_index=True)
+        concl_breaches = concl_breaches.append(pd.Series({'PF':col, '# VaR Exceeded':count,"Actual avg. loss":breach,"Average est. VaR":limit,'Percentage':pct,'Observations':length}), ignore_index=True)
     concl_breaches.set_index('PF', inplace=True)
     return out_breach, concl_breaches
+
