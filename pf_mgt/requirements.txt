@@ -1,0 +1,23 @@
+pandas>=1.1.0
+PyPortfolioOpt>=1.2.7
+xlrd
+xlsxwriter
+lxml 
+Matplotlib
+Seaborn
+NumPy
+SciPy
+Statsmodels
+tabulate
+
+# For pytables:
+h5py
+numexpr
+Cython
+blosc
+tables #PyTables name
+
+#pyportfolioopt>=1.2.7
+
+
+# numpy pandas>=1.1.0 PyPortfolioOpt>=1.2.7 xlrd xlsxwriter lxml Matplotlib Seaborn NumPy SciPy Statsmodels tabulate h5py numexpr Cython blosc tables
