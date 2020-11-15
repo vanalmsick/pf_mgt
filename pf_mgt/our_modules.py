@@ -735,7 +735,7 @@ def VaR(returns_DF, p=0.95, method='hist', output='VaR', n_days=1, n_sims = 1000
             # With weekends
             # returns_DF['days'] = (returns_DF.index.max() - returns_DF.index).days 
             # Without weekends
-            returns_DF['days'] = np.arange(len(returns_DF), 0, -1)
+            returns_DF['days'] = np.arange(len(returns_DF)-2, 0, -1)
             # Note: np.log is ln
             lamda = 1 - np.log(2)/(ewma*days)
             # Formula used: (1-λ)× λ^(t-1)
